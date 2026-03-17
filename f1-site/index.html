@@ -691,15 +691,17 @@ const _sb = {
     },
 
     async signInWithOAuth({provider, options={}}){
-      // For OAuth we redirect directly to Supabase auth URL
-      // We need the Supabase URL — fetch it from a meta endpoint
+      // Fetch Supabase URL from proxy settings endpoint, then redirect
+      // Use window.location.origin as redirect_to so Supabase sends user back here
       try{
         const res = await fetch(`${PROXY}?path=${encodeURIComponent('/auth/v1/settings')}`);
         const settings = await res.json();
-        const supaUrl = settings._supabaseUrl; // injected by proxy
+        const supaUrl = settings._supabaseUrl;
         if(!supaUrl) throw new Error('Cannot determine Supabase URL for OAuth');
-        const redirectTo = options.redirectTo || window.location.origin;
-        window.location.href = `${supaUrl}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(redirectTo)}`;
+        // Build authorize URL — redirect_to must exactly match an allowed redirect URL in Supabase
+        const redirectTo = window.location.origin;
+        const authorizeUrl = `${supaUrl}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(redirectTo)}`;
+        window.location.href = authorizeUrl;
         return { error: null };
       }catch(e){ return { error: { message: e.message } }; }
     },
