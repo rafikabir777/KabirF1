@@ -10,12 +10,13 @@ const ALLOWED_ORIGIN = process.env.SITE_URL || '*';
 // Paths that are allowed to be proxied
 const ALLOWED_PATH_PREFIXES = [
   '/rest/v1/',
-  '/auth/v1/token',
+  '/auth/v1/token',       // sign in + refresh token
   '/auth/v1/signup',
   '/auth/v1/logout',
-  '/auth/v1/user',
-  '/auth/v1/settings',
-  '/auth/v1/authorize',
+  '/auth/v1/user',        // get user + update password
+  '/auth/v1/recover',     // password reset email
+  '/auth/v1/settings',    // OAuth URL lookup
+  '/auth/v1/authorize',   // OAuth redirect
 ];
 
 exports.handler = async function(event) {
