@@ -427,6 +427,34 @@ header{padding:36px 0 20px;display:flex;align-items:center;justify-content:space
 .tg-toggle-btn.on{background:rgba(225,6,0,.15);border-color:rgba(225,6,0,.4);color:var(--text)}
 .tg-toggle-btn:hover{border-color:rgba(255,255,255,.2);color:var(--text)}
 .tg-nodata{font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;text-align:center;padding:12px 0}
+
+/* ── Admin Notice Banner ── */
+.notice-banner{
+  display:none;
+  position:relative;
+  margin-bottom:28px;
+  border-radius:14px;
+  padding:14px 48px 14px 20px;
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  animation:fadeUp .4s ease both;
+  border:1px solid;
+}
+.notice-banner.show{display:flex;align-items:flex-start;gap:12px;}
+.notice-banner.type-info{background:rgba(30,100,255,.08);border-color:rgba(30,100,255,.25);}
+.notice-banner.type-warning{background:rgba(255,160,0,.08);border-color:rgba(255,160,0,.28);}
+.notice-banner.type-alert{background:rgba(225,6,0,.08);border-color:rgba(225,6,0,.28);}
+.notice-banner.type-success{background:rgba(0,230,118,.07);border-color:rgba(0,230,118,.25);}
+.notice-icon{font-size:18px;flex-shrink:0;margin-top:1px;}
+.notice-body{flex:1;}
+.notice-title{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:3px;}
+.notice-banner.type-info .notice-title{color:#6ab0ff;}
+.notice-banner.type-warning .notice-title{color:#ffc040;}
+.notice-banner.type-alert .notice-title{color:var(--red);}
+.notice-banner.type-success .notice-title{color:#00e676;}
+.notice-msg{font-family:'Barlow',sans-serif;font-size:13px;color:rgba(240,240,240,.75);line-height:1.55;}
+.notice-dismiss{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:4px;transition:color .2s;line-height:1;}
+.notice-dismiss:hover{color:var(--text);}
 </style>
 </head>
 <body>
@@ -445,6 +473,16 @@ header{padding:36px 0 20px;display:flex;align-items:center;justify-content:space
       <div id="authHeaderSlot"></div>
     </div>
   </header>
+
+  <!-- Admin Notice Banner -->
+  <div class="notice-banner" id="noticeBanner">
+    <div class="notice-icon" id="noticeIcon">📢</div>
+    <div class="notice-body">
+      <div class="notice-title" id="noticeTitle"></div>
+      <div class="notice-msg" id="noticeMsg"></div>
+    </div>
+    <button class="notice-dismiss" onclick="dismissNotice()" title="Dismiss">✕</button>
+  </div>
 
   <div class="countdown-section">
     <p class="sec-tag">Weekend Sessions</p>
@@ -478,7 +516,7 @@ header{padding:36px 0 20px;display:flex;align-items:center;justify-content:space
       <span>Formula 1</span>
       <p>2026 Season Hub</p>
     </div>
-    <div class="auth-tabs">
+    <div class="auth-tabs" id="authTabsRow">
       <button class="auth-tab active" id="tabSignIn" onclick="switchAuthTab('signin')">Sign In</button>
       <button class="auth-tab" id="tabSignUp" onclick="switchAuthTab('signup')">Sign Up</button>
     </div>
@@ -489,6 +527,18 @@ header{padding:36px 0 20px;display:flex;align-items:center;justify-content:space
       <div class="auth-field"><label>Email</label><input class="auth-input" id="siEmail" type="email" placeholder="your@email.com"></div>
       <div class="auth-field"><label>Password</label><input class="auth-input" id="siPass" type="password" placeholder="••••••••"></div>
       <button class="auth-submit" id="siBtn" onclick="doSignIn()">Sign In</button>
+      <div style="text-align:center;margin-top:14px">
+        <button onclick="switchAuthTab('reset')" style="background:none;border:none;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:2px;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;transition:color .2s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Forgot password?</button>
+      </div>
+    </div>
+
+    <div id="authResetForm" style="display:none">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:1px;color:var(--muted);margin-bottom:16px;line-height:1.6">Enter your email and we'll send you a reset link.</div>
+      <div class="auth-field"><label>Email</label><input class="auth-input" id="rstEmail" type="email" placeholder="your@email.com"></div>
+      <button class="auth-submit" id="rstBtn" onclick="doResetPassword()">Send Reset Link</button>
+      <div style="text-align:center;margin-top:14px">
+        <button onclick="switchAuthTab('signin')" style="background:none;border:none;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:2px;cursor:pointer;text-decoration:underline;text-decoration-style:dotted" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">← Back to sign in</button>
+      </div>
     </div>
 
     <div id="authSignUpForm" style="display:none">
@@ -630,10 +680,13 @@ const _sb = {
           })
         });
         const data = await res.json();
-        if(data.id || data.email){
+        // 200/201 = success regardless of body shape
+        // (body varies: with email confirm ON returns {identities:[]}, OFF returns full user)
+        if(res.ok && !data.error && !data.error_description){
           return { error: null };
         }
-        return { error: { message: data.msg || data.error_description || 'Sign up failed' } };
+        // Actual errors come with non-2xx status or explicit error fields
+        return { error: { message: data.msg || data.error_description || data.error || 'Sign up failed' } };
       }catch(e){ return { error: { message: e.message } }; }
     },
 
@@ -1272,8 +1325,11 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeAuthModal();cl
 function switchAuthTab(t){
   document.getElementById('authSignInForm').style.display=t==='signin'?'block':'none';
   document.getElementById('authSignUpForm').style.display=t==='signup'?'block':'none';
+  document.getElementById('authResetForm').style.display=t==='reset'?'block':'none';
   document.getElementById('tabSignIn').classList.toggle('active',t==='signin');
   document.getElementById('tabSignUp').classList.toggle('active',t==='signup');
+  // Hide tab bar when on reset screen so it's cleaner
+  document.getElementById('authTabsRow').style.display=t==='reset'?'none':'flex';
   clearAuthMessages();
 }
 
@@ -1315,6 +1371,91 @@ async function doGoogleSignIn(){
 async function doSignOut(){
   if(_sbReady) await _sb.auth.signOut();
   _user=null; updateAuthHeader(); closeUserMenu();
+}
+
+async function doResetPassword(){
+  const email = document.getElementById('rstEmail')?.value.trim();
+  if(!email){ showAuthError('Please enter your email address.'); return; }
+  const btn = document.getElementById('rstBtn');
+  btn.disabled=true; btn.textContent='Sending…';
+  try{
+    const redirectTo = window.location.origin + '?reset=1';
+    const res = await fetch(`${PROXY}?path=${encodeURIComponent('/auth/v1/recover')}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email, redirectTo })
+    });
+    // Supabase returns 200 even if email doesn't exist (security best practice)
+    showAuthSuccess('Reset link sent! Check your inbox — including spam.');
+    btn.textContent = '✓ Sent';
+  }catch(e){
+    showAuthError('Could not send reset email. Try again.');
+    btn.disabled=false; btn.textContent='Send Reset Link';
+  }
+}
+
+// Handle password reset redirect — when user clicks link in email,
+// they land back on the site with an access_token in the URL hash.
+// We catch it, show a "set new password" form automatically.
+function checkPasswordResetFlow(){
+  const hash = window.location.hash;
+  const params = new URLSearchParams(hash.replace('#',''));
+  const type = params.get('type');
+  const token = params.get('access_token');
+
+  if(type === 'recovery' && token){
+    _userToken = token;
+    window.history.replaceState(null,'',window.location.pathname);
+    // Show the set-new-password modal
+    openAuthModal();
+    document.getElementById('authTabsRow').style.display='none';
+    document.getElementById('authSignInForm').style.display='none';
+    document.getElementById('authSignUpForm').style.display='none';
+    document.getElementById('authResetForm').style.display='none';
+    document.getElementById('authError').classList.remove('show');
+    document.getElementById('authSuccess').classList.remove('show');
+    // Inject the new password form
+    const modal = document.getElementById('authModal');
+    if(!document.getElementById('authNewPassForm')){
+      const div = document.createElement('div');
+      div.id = 'authNewPassForm';
+      div.innerHTML = `
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--red);margin-bottom:16px">Set New Password</div>
+        <div class="auth-field"><label>New Password</label><input class="auth-input" id="newPass" type="password" placeholder="Min 6 characters" autocomplete="new-password"></div>
+        <div class="auth-field"><label>Confirm Password</label><input class="auth-input" id="newPassConfirm" type="password" placeholder="Repeat password" autocomplete="new-password"></div>
+        <button class="auth-submit" id="newPassBtn" onclick="doSetNewPassword()">Set New Password</button>`;
+      modal.appendChild(div);
+    }
+  }
+}
+
+async function doSetNewPassword(){
+  const pass = document.getElementById('newPass')?.value;
+  const confirm = document.getElementById('newPassConfirm')?.value;
+  if(!pass || pass.length < 6){ showAuthError('Password must be at least 6 characters.'); return; }
+  if(pass !== confirm){ showAuthError('Passwords do not match.'); return; }
+  const btn = document.getElementById('newPassBtn');
+  btn.disabled=true; btn.textContent='Updating…';
+  try{
+    const res = await fetch(`${PROXY}?path=${encodeURIComponent('/auth/v1/user')}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json', 'x-user-token': _userToken},
+      body: JSON.stringify({ password: pass })
+    });
+    const data = await res.json();
+    if(data.id || data.email){
+      showAuthSuccess('Password updated! You are now signed in.');
+      btn.textContent = '✓ Updated';
+      _user = data;
+      updateAuthHeader();
+      setTimeout(()=>closeAuthModal(), 2000);
+    } else {
+      throw new Error(data.msg || 'Update failed');
+    }
+  }catch(e){
+    showAuthError('Could not update password: ' + e.message);
+    btn.disabled=false; btn.textContent='Set New Password';
+  }
 }
 
 // Auth state listener — fires on sign in, sign out, page load
@@ -2289,6 +2430,58 @@ function setPaceFilter(mode){
 /* ═══════════════════════════════
    INIT
 ═══════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════
+   ADMIN NOTICE BANNER
+   Reads from Supabase `notices` table.
+   Only shows if active=true and not dismissed this session.
+═══════════════════════════════════════════════════ */
+const NOTICE_ICONS = {info:'📢', warning:'⚠️', alert:'🚨', success:'✅'};
+
+async function loadNotice(){
+  try{
+    const res = await fetch(
+      `${PROXY}?path=${encodeURIComponent('/rest/v1/notices')}&select=*&active=eq.true&order=created_at.desc&limit=1`,
+      { headers:{ 'Content-Type':'application/json' } }
+    );
+    const data = await res.json();
+    const notice = Array.isArray(data) ? data[0] : null;
+    if(!notice) return;
+
+    // Don't re-show if user dismissed this exact notice this session
+    const dismissed = sessionStorage.getItem('dismissed_notice');
+    if(dismissed === String(notice.id)) return;
+
+    const banner  = document.getElementById('noticeBanner');
+    const icon    = document.getElementById('noticeIcon');
+    const title   = document.getElementById('noticeTitle');
+    const msg     = document.getElementById('noticeMsg');
+    if(!banner) return;
+
+    const type = notice.type || 'info';
+    banner.className = `notice-banner type-${type} show`;
+    icon.textContent = NOTICE_ICONS[type] || '📢';
+    title.textContent = notice.title || '';
+    msg.textContent   = notice.message || '';
+  }catch(e){ /* silently fail — notice is non-critical */ }
+}
+
+function dismissNotice(){
+  const banner = document.getElementById('noticeBanner');
+  if(!banner) return;
+  banner.style.transition = 'opacity .3s, transform .3s';
+  banner.style.opacity = '0';
+  banner.style.transform = 'translateY(-8px)';
+  setTimeout(()=>{ banner.classList.remove('show'); }, 300);
+  // Remember dismissal so it doesn't re-appear on refresh this session
+  fetch(`${PROXY}?path=${encodeURIComponent('/rest/v1/notices')}&select=id&active=eq.true&order=created_at.desc&limit=1`)
+    .then(r=>r.json())
+    .then(d=>{ if(d[0]?.id) sessionStorage.setItem('dismissed_notice', String(d[0].id)); })
+    .catch(()=>{});
+}
+
+checkPasswordResetFlow();
+loadNotice();
 loadAll();
 setInterval(()=>loadAll(),5*60*1000);
 </script>
