@@ -1358,8 +1358,16 @@ async function doSignUp(){
   const btn=document.getElementById('suBtn');btn.disabled=true;btn.textContent='Creating account…';
   const{error}=await _sb.auth.signUp({email,password:pass,options:{data:{display_name:name},emailRedirectTo:window.location.origin}});
   btn.disabled=false;btn.textContent='Create Account';
-  if(error)showAuthError(error.message);
-  else showAuthSuccess('Account created! Check your email to confirm, then sign in.');
+  if(error){showAuthError(error.message);}
+  else{
+    // Confirm email is OFF — user is signed in immediately, close modal
+    closeAuthModal();
+    // Trigger sign in automatically so they don't have to sign in manually
+    const{error:signInErr}=await _sb.auth.signInWithPassword({email,password:pass});
+    if(!signInErr){
+      showAuthSuccess && showAuthSuccess('Welcome to F1 Race Lens!');
+    }
+  }
 }
 
 async function doGoogleSignIn(){
