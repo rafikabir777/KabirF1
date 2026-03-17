@@ -633,7 +633,10 @@ const _sb = {
       },
 
       upsert(data, opts={}){
-        _method='POST'; _body=data; _opts.onConflict=opts.onConflict||true;
+        _method='POST'; _body=data;
+        // PostgREST requires on_conflict as a URL query parameter for upsert
+        if(opts.onConflict) _filters.push(`on_conflict=${encodeURIComponent(opts.onConflict)}`);
+        _opts.onConflict = opts.onConflict || true;
         return { then(res,rej){ return run().then(res,rej); } };
       },
 
@@ -740,21 +743,21 @@ const _sb = {
         }
       }
       // Check sessionStorage for persisted token
-      const saved = sessionStorage.getItem('_f1_token');
+      const saved = localStorage.getItem('_f1_token');
       if(saved && !_userToken){
         _userToken = saved;
         fetch(`${PROXY}?path=${encodeURIComponent('/auth/v1/user')}`, {
           headers: {'x-user-token': saved}
         }).then(r=>r.json()).then(u=>{
           if(u?.id){ _user=u; fn('SIGNED_IN',{user:u}); }
-          else { sessionStorage.removeItem('_f1_token'); }
+          else { localStorage.removeItem('_f1_token'); }
         }).catch(()=>{});
       }
       return { unsubscribe(){ _sb.auth._listeners = _sb.auth._listeners.filter(f=>f!==fn); } };
     },
 
     // Persist token to sessionStorage on sign-in so page refresh keeps session
-    _persistToken(token){ if(token) sessionStorage.setItem('_f1_token',token); else sessionStorage.removeItem('_f1_token'); }
+    _persistToken(token){ if(token) localStorage.setItem('_f1_token',token); else localStorage.removeItem('_f1_token'); }
   },
 
   channel(name){ return { on(){ return this; }, subscribe(){ return this; }, unsubscribe(){} }; }
@@ -2459,7 +2462,7 @@ async function loadNotice(){
     if(!notice) return;
 
     // Don't re-show if user dismissed this exact notice this session
-    const dismissed = sessionStorage.getItem('dismissed_notice');
+    const dismissed = localStorage.getItem('dismissed_notice');
     if(dismissed === String(notice.id)) return;
 
     const banner  = document.getElementById('noticeBanner');
@@ -2486,7 +2489,7 @@ function dismissNotice(){
   // Remember dismissal so it doesn't re-appear on refresh this session
   fetch(`${PROXY}?path=${encodeURIComponent('/rest/v1/notices')}&select=id&active=eq.true&order=created_at.desc&limit=1`)
     .then(r=>r.json())
-    .then(d=>{ if(d[0]?.id) sessionStorage.setItem('dismissed_notice', String(d[0].id)); })
+    .then(d=>{ if(d[0]?.id) localStorage.setItem('dismissed_notice', String(d[0].id)); })
     .catch(()=>{});
 }
 
