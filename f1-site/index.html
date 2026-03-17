@@ -717,6 +717,8 @@ const _sb = {
         });
       }catch(e){}
       _userToken = null; _user = null;
+      localStorage.removeItem('_f1_token');
+      localStorage.removeItem('_f1_refresh');
       _sb.auth._notify('SIGNED_OUT', null);
     },
 
@@ -725,39 +727,81 @@ const _sb = {
 
     onAuthStateChange(fn){
       _sb.auth._listeners.push(fn);
-      // Check for OAuth callback token in URL hash
+
+      // ── 1. OAuth callback — token arrives in URL hash ──────────────
       const hash = window.location.hash;
       if(hash.includes('access_token')){
         const params = new URLSearchParams(hash.replace('#',''));
         const token = params.get('access_token');
+        const refresh = params.get('refresh_token');
         if(token){
           _userToken = token;
-          // Fetch user info
+          // Save both tokens immediately before clearing hash
+          localStorage.setItem('_f1_token', token);
+          if(refresh) localStorage.setItem('_f1_refresh', refresh);
           fetch(`${PROXY}?path=${encodeURIComponent('/auth/v1/user')}`, {
             headers: {'x-user-token': token}
           }).then(r=>r.json()).then(u=>{
             _user = u;
             fn('SIGNED_IN', {user: u});
+            // Clear hash from URL cleanly
             window.history.replaceState(null,'',window.location.pathname);
           }).catch(()=>{});
         }
       }
-      // Check sessionStorage for persisted token
+
+      // ── 2. Page refresh — restore from localStorage ─────────────────
       const saved = localStorage.getItem('_f1_token');
       if(saved && !_userToken){
         _userToken = saved;
         fetch(`${PROXY}?path=${encodeURIComponent('/auth/v1/user')}`, {
           headers: {'x-user-token': saved}
         }).then(r=>r.json()).then(u=>{
-          if(u?.id){ _user=u; fn('SIGNED_IN',{user:u}); }
-          else { localStorage.removeItem('_f1_token'); }
+          if(u?.id){
+            // Token still valid
+            _user=u; fn('SIGNED_IN',{user:u});
+          } else {
+            // Token expired — try to refresh using refresh_token
+            const refresh = localStorage.getItem('_f1_refresh');
+            if(refresh){
+              fetch(`${PROXY}?path=${encodeURIComponent('/auth/v1/token?grant_type=refresh_token')}`, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({refresh_token: refresh})
+              }).then(r=>r.json()).then(d=>{
+                if(d.access_token){
+                  _userToken = d.access_token;
+                  localStorage.setItem('_f1_token', d.access_token);
+                  if(d.refresh_token) localStorage.setItem('_f1_refresh', d.refresh_token);
+                  _user = d.user;
+                  fn('SIGNED_IN', {user: d.user});
+                } else {
+                  // Refresh also failed — clear everything
+                  localStorage.removeItem('_f1_token');
+                  localStorage.removeItem('_f1_refresh');
+                  _userToken = null;
+                }
+              }).catch(()=>{
+                localStorage.removeItem('_f1_token');
+                localStorage.removeItem('_f1_refresh');
+              });
+            } else {
+              localStorage.removeItem('_f1_token');
+              _userToken = null;
+            }
+          }
         }).catch(()=>{});
       }
       return { unsubscribe(){ _sb.auth._listeners = _sb.auth._listeners.filter(f=>f!==fn); } };
     },
 
-    // Persist token to sessionStorage on sign-in so page refresh keeps session
-    _persistToken(token){ if(token) localStorage.setItem('_f1_token',token); else localStorage.removeItem('_f1_token'); }
+    _persistToken(token){
+      if(token) localStorage.setItem('_f1_token',token);
+      else {
+        localStorage.removeItem('_f1_token');
+        localStorage.removeItem('_f1_refresh');
+      }
+    }
   },
 
   channel(name){ return { on(){ return this; }, subscribe(){ return this; }, unsubscribe(){} }; }
